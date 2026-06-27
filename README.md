@@ -37,7 +37,7 @@ Includes authentication/authorization with **JWT**, a layered architecture (Cont
 - 🏷 Categories management
 - 🎁 Prizes management
 - 💝 Donors management
-- 🛒 Cart & checkout flow
+- 🛒 Cart &  checkout flow
 - 🧱 Clean REST API + layered architecture (Controllers / Services / Repositories)
 - 🗄 EF Core + Migrations
 

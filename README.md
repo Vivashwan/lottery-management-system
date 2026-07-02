@@ -11,7 +11,7 @@ Includes authentication/authorization with **JWT**, a layered architecture (Cont
 
 ---
 
-## 📚 Table of Contents
+##  Table of Contents
 - [Key Features](#-key-features)
 - [Architecture](#-architecture)
 - [Tech Stack](#-tech-stack)

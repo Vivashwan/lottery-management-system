@@ -1,4 +1,4 @@
-# 🎁 Gift Raffle Platform
+#  Gift Raffle Platform
 
 [![Angular](https://img.shields.io/badge/Angular-20.x-DD0031?logo=angular&logoColor=white)](#)
 [![.NET](https://img.shields.io/badge/.NET-9.0-512BD4?logo=dotnet&logoColor=white)](#)
@@ -29,21 +29,21 @@ Includes authentication/authorization with **JWT**, a layered architecture (Cont
 
 ---
 
-## ✨ Key Features
-- 🔐 Register / Login
-- 🧾 JWT Authentication + Authorization
-- 👥 Role‑based access (Admin / User)
-- 🎟 Raffle / Lottery management
-- 🏷 Categories management
-- 🎁 Prizes management
-- 💝 Donors management
-- 🛒 Cart &  checkout flow
-- 🧱 Clean REST API + layered architecture (Controllers / Services / Repositories)
-- 🗄 EF Core + Migrations
+##  Key Features
+-  Register / Login
+-  JWT Authentication + Authorization
+-  Role‑based access (Admin / User)
+-  Raffle / Lottery management
+-  Categories management
+-  Prizes management
+-  Donors management
+-  Cart &  checkout flow
+-  Clean REST API + layered architecture (Controllers / Services / Repositories)
+-  EF Core + Migrations
 
 ---
 
-## 🏗 Architecture
+##  Architecture
 ```
 Angular SPA  →  ASP.NET Core Web API  →  SQL Server
          Auth: JWT         ORM: EF Core
@@ -69,7 +69,7 @@ Angular SPA  →  ASP.NET Core Web API  →  SQL Server
 
 ---
 
-## 📂 Project Structure
+##  Project Structure
 ```
 gift-raffle-platform/
 │

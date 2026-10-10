@@ -1,8 +1,9 @@
+﻿using Autofac;
+using Autofac.Extensions.DependencyInjection;
 using ex1.Data;
-using ex1.Interfaces.Repositorys;
-using ex1.Interfaces.Services;
-using ex1.Repository;
-using ex1.services;
+using ex1.DependencyInjection;
+using ex1.Middleware;
+using Lottery.Messaging;
 
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -21,6 +22,17 @@ try
     Log.Information("Starting Prizes API");
     var builder = WebApplication.CreateBuilder(args);
     builder.Host.UseSerilog();
+
+    // Autofac replaces the built-in container; registrations live in modules (see DependencyInjection/)
+    builder.Host.UseServiceProviderFactory(new AutofacServiceProviderFactory());
+    builder.Host.ConfigureContainer<ContainerBuilder>(container =>
+    {
+        container.RegisterModule<DataAccessModule>();
+        container.RegisterModule<ApplicationServicesModule>();
+        container.RegisterModule<MessagingModule>();
+    });
+
+    builder.Services.Configure<RabbitMqOptions>(builder.Configuration.GetSection(RabbitMqOptions.SectionName));
 
 
     builder.Services.AddControllers()
@@ -75,24 +87,6 @@ try
     );
 
 
-    builder.Services.AddScoped<IUserRepository, UserRepository>();
-    builder.Services.AddScoped<IDonorRepository, DonorRepository>();
-    builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
-    builder.Services.AddScoped<IPrizeRepository, PrizeRepository>();
-    builder.Services.AddScoped<ICartRepository, CartRepository>();
-    builder.Services.AddScoped<ILotteryRepository, LotteryRepository>();
-
-
-    builder.Services.AddScoped<ITokenService, TokenService>();
-    builder.Services.AddScoped<IUserService, UserService>();
-    builder.Services.AddScoped<IDonorService, DonorService>();
-    builder.Services.AddScoped<ICategoryService, CategoryService>();
-    builder.Services.AddScoped<IPrizeService, PrizeService>();
-    builder.Services.AddScoped<ICartService, CartService>();
-    builder.Services.AddScoped<ILotteryService, LotteryService>();
-    builder.Services.AddScoped<IEmailService, EmailService>();
-
-
     var jwtSettings = builder.Configuration.GetSection("JwtSettings");
     var secretKey = jwtSettings["SecretKey"] ?? "VeryStrongDefaultKey123!";
 
@@ -133,6 +127,11 @@ try
           );
     });
     var app = builder.Build();
+
+    if (app.Configuration.GetValue<bool>("Database:MigrateOnStartup"))
+        await MigrateWithRetryAsync(app.Services);
+
+    app.UseMiddleware<ExceptionHandlingMiddleware>();
     if (app.Environment.IsDevelopment())
     {
         app.UseSwagger();
@@ -168,4 +167,24 @@ catch (Exception ex)
 finally
 {
     Log.CloseAndFlush();
+}
+
+// SQL Server can take a while to accept connections when started alongside the API (e.g. docker compose)
+static async Task MigrateWithRetryAsync(IServiceProvider services, int attempts = 10)
+{
+    for (var attempt = 1; ; attempt++)
+    {
+        try
+        {
+            using var scope = services.CreateScope();
+            await scope.ServiceProvider.GetRequiredService<StoreContext>().Database.MigrateAsync();
+            Log.Information("Database migrations applied");
+            return;
+        }
+        catch (Exception ex) when (attempt < attempts)
+        {
+            Log.Warning("Database not ready (attempt {Attempt}/{Attempts}): {Message}", attempt, attempts, ex.Message);
+            await Task.Delay(TimeSpan.FromSeconds(5));
+        }
+    }
 }

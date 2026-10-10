@@ -1,0 +1,59 @@
+# Full backend: API + notification worker + SQL Server + RabbitMQ
+#   cp .env.example .env   (then set real values)
+#   docker compose up --build
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${SQL_SA_PASSWORD:?set SQL_SA_PASSWORD in .env}
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"     # AMQP
+      - "15672:15672"   # management UI (guest/guest)
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: ex1/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development   # enables Swagger at /swagger
+      ConnectionStrings__DefaultConnection: Server=sqlserver,1433;Database=GiftRaffle;User Id=sa;Password=${SQL_SA_PASSWORD};TrustServerCertificate=True
+      Database__MigrateOnStartup: "true"
+      JwtSettings__SecretKey: ${JWT_SECRET_KEY:?set JWT_SECRET_KEY in .env}
+      JwtSettings__Issuer: GiftRaffleApi
+      JwtSettings__Audience: GiftRaffleClient
+      RabbitMq__HostName: rabbitmq
+    depends_on:
+      sqlserver:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+
+  notification-worker:
+    build:
+      context: .
+      dockerfile: Lottery.NotificationWorker/Dockerfile
+    environment:
+      RabbitMq__HostName: rabbitmq
+      Email__EmailAddress: ${SMTP_EMAIL:-}
+      Email__AppPassword: ${SMTP_APP_PASSWORD:-}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+volumes:
+  sqlserver-data:

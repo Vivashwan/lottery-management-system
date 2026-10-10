@@ -1,0 +1,9 @@
+<Project>
+  <!-- Shared settings imported automatically by every project under server/ -->
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Deterministic>true</Deterministic>
+    <Product>Gift Raffle Platform</Product>
+    <VersionPrefix>1.1.0</VersionPrefix>
+  </PropertyGroup>
+</Project>

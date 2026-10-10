@@ -9,6 +9,8 @@
 A full‑stack raffle & gifts management system built with **Angular** (client) and **ASP.NET Core Web API** (server), backed by **SQL Server**.  
 Includes authentication/authorization with **JWT**, a layered architecture (Controllers → Services → Repositories), and **EF Core Migrations**.
 
+> This is an extended fork of [rivky9523/lottery-management-system](https://github.com/rivky9523/lottery-management-system) by Rivky Peretz. See [What's new in this fork](#-whats-new-in-this-fork) for the backend additions.
+
 ---
 
 ##  Table of Contents
@@ -243,9 +245,44 @@ dotnet ef database update
 
 ## 🧭 Roadmap
 - Move API base URL in Angular to `environment.ts` (avoid hardcoded localhost)
-- Add automated tests (unit/integration)
-- Add Docker (API + SQL Server + client)
+- ~~Add automated tests (unit/integration)~~ (done in this fork)
+- ~~Add Docker (API + SQL Server)~~ (done in this fork; client not yet containerised)
 - Add CI workflow (build + test on PR)
+
+---
+
+## ✨ What's new in this fork
+
+Backend extensions by [Vivashwan Ghosh](https://github.com/Vivashwan). All changes are under `server/`.
+
+### 🎯 Fair, concurrency-safe raffle
+- **Ticket-weighted draw**: a user with 3 tickets is 3× as likely to win as a user with 1 (previously every buyer had equal odds regardless of tickets). Uses `RandomNumberGenerator` instead of `System.Random`, behind an `IRandomSource` so it can be tested deterministically.
+- **No double draws**: the winner is recorded by the stored procedure `dbo.usp_RecordWinner`, whose `UPDATE … WHERE IsRaffleDone = 0` makes check-and-set a single atomic statement. An integration test fires 20 concurrent draws at real SQL Server and asserts exactly one wins.
+
+### 🗄 SQL Server
+- Migration `AddRaffleStoredProcedures`: `dbo.fn_PrizeTicketCount` (scalar function), `dbo.usp_RecordWinner`, and `dbo.usp_GetRaffleReport` (tickets sold, revenue and winner per prize, exposed at `GET /api/lottery/report`).
+- Migration `SyncTicketModel`: the `Ticket` configuration had been commented out after the first migration, leaving the snapshot out of sync (a stray `PrizeId1` column). EF Core 9 refuses to migrate in that state; this migration realigns the schema.
+
+### 📨 RabbitMQ + Worker Service
+- Winner emails no longer block the HTTP request. The API publishes a `WinnerDrawnEvent`; a separate **.NET Worker Service** (`Lottery.NotificationWorker`, installable as a **Windows Service**) consumes it and sends the email.
+- Manual acknowledgements (a crash mid-send redelivers), a **dead-letter queue** for messages that fail, prefetch limits, and parallel consumers (`ConsumerConcurrency`).
+- If the broker is down, the draw still succeeds and the response reports `notificationQueued: false`. The existing `emailSent` field is kept for the Angular client.
+
+### 🧩 Autofac & error handling
+- **Autofac** replaces the built-in container. Repositories and services are registered by convention in modules (`DependencyInjection/AutofacModules.cs`) instead of one line each.
+- **Typed exceptions + middleware** (`NotFoundException`, `ConflictException`, `BusinessRuleException`) produce RFC 7807 problem responses. This replaced matching on Hebrew exception messages in the controller, which had a typo that turned "prize not found" into a 500.
+
+### 🧪 Tests (TDD)
+64 xUnit tests (Moq, FluentAssertions), up from 26 with one failing:
+- Weighted picker: roll-to-ticket mapping and a statistical check that win rate matches ticket share
+- Lottery service, exception middleware, notification handler
+- Container composition: every controller resolves from the real Autofac container, with correct lifetimes
+- SQL Server integration (skipped unless `LOTTERY_TEST_SQL` is set): migrations, stored procedures, function, and the concurrency test
+
+### 🐳 Build & run
+- `docker compose up --build` (in `server/`) runs the API, the worker, SQL Server 2022 and RabbitMQ, applying migrations on startup. Copy `.env.example` to `.env` first.
+- `build.ps1` (PowerShell): restore → Release build → tests with coverage → optional Docker images.
+- `Directory.Build.props` / `Directory.Build.targets`: shared MSBuild settings and a custom target that stamps the git commit into every assembly's version (e.g. `1.1.0+650e0b9`).
 
 ---
 

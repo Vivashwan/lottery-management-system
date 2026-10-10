@@ -179,9 +179,6 @@ namespace ex1.Migrations
                     b.Property<int>("PrizeId")
                         .HasColumnType("int");
 
-                    b.Property<int?>("PrizeId1")
-                        .HasColumnType("int");
-
                     b.Property<int>("Quantity")
                         .HasColumnType("int");
 
@@ -194,8 +191,6 @@ namespace ex1.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("PrizeId");
-
-                    b.HasIndex("PrizeId1");
 
                     b.HasIndex("UserId");
 
@@ -313,19 +308,15 @@ namespace ex1.Migrations
             modelBuilder.Entity("ex1.Models.Ticket", b =>
                 {
                     b.HasOne("ex1.Models.Prize", "Prize")
-                        .WithMany()
+                        .WithMany("Tickets")
                         .HasForeignKey("PrizeId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("ex1.Models.Prize", null)
-                        .WithMany("Tickets")
-                        .HasForeignKey("PrizeId1");
-
                     b.HasOne("ex1.Models.User", "User")
                         .WithMany("Tickets")
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("Prize");

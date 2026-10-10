@@ -1,4 +1,4 @@
-﻿namespace ex1.Interfaces.Services
+﻿namespace Lottery.Messaging.Email
 {
     public interface IEmailService
     {

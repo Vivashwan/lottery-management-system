@@ -1,0 +1,18 @@
+<Project>
+  <!--
+    Stamps the current git commit into every assembly's InformationalVersion
+    (e.g. 1.1.0+3f2a9c1), so a running build can be traced back to its source.
+    Falls back silently when git is unavailable (e.g. building from a source archive).
+  -->
+  <Target Name="StampGitCommit" BeforeTargets="GetAssemblyVersion;GenerateAssemblyInfo" Condition="'$(SourceRevisionId)' == ''">
+    <Exec Command="git rev-parse --short HEAD" ConsoleToMSBuild="true" EchoOff="true"
+          StandardOutputImportance="low" StandardErrorImportance="low"
+          IgnoreExitCode="true" IgnoreStandardErrorWarningFormat="true" ContinueOnError="true">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_GitCommit" />
+      <Output TaskParameter="ExitCode" PropertyName="_GitExitCode" />
+    </Exec>
+    <PropertyGroup Condition="'$(_GitExitCode)' == '0'">
+      <SourceRevisionId>$(_GitCommit)</SourceRevisionId>
+    </PropertyGroup>
+  </Target>
+</Project>

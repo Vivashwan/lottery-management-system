@@ -1,72 +1,89 @@
-﻿using ex1.DTOs;
+using ex1.DTOs;
+using ex1.Exceptions;
 using ex1.Interfaces.Repositorys;
 using ex1.Interfaces.Services;
+using ex1.Lottery;
+using Lottery.Messaging;
+using Lottery.Messaging.Contracts;
 
 namespace ex1.services
 {
     public class LotteryService : ILotteryService
     {
         private readonly ILotteryRepository _lotteryRepository;
-        private readonly IEmailService _emailService;
+        private readonly IWinnerPicker _winnerPicker;
+        private readonly IMessagePublisher _publisher;
         private readonly ILogger<LotteryService> _logger;
 
         public LotteryService(
             ILotteryRepository lotteryRepository,
-            IEmailService emailService,
+            IWinnerPicker winnerPicker,
+            IMessagePublisher publisher,
             ILogger<LotteryService> logger)
         {
             _lotteryRepository = lotteryRepository;
-            _emailService = emailService;
+            _winnerPicker = winnerPicker;
+            _publisher = publisher;
             _logger = logger;
         }
 
         public async Task<LotteryResultDto> RafflePrizeAsync(int prizeId)
         {
+            var prize = await _lotteryRepository.GetPrizeById(prizeId)
+                ?? throw new NotFoundException($"Prize {prizeId} was not found.");
+
+            if (prize.IsRaffleDone)
+                throw new ConflictException($"Prize {prizeId} has already been drawn.");
+
             var entries = await _lotteryRepository.GetRaffleEntries(prizeId);
-
             if (entries.Count == 0)
-            {
-                _logger.LogInformation("There are no participants in the lottery {PrizeId}", prizeId);
-                return null;
-            }
-            var prize = await _lotteryRepository.GetPrizeById(prizeId);
+                throw new BusinessRuleException($"Prize {prizeId} has no paid tickets to draw from.");
 
-            var random = new Random();
-            var winner = entries[random.Next(entries.Count)];
+            var winner = _winnerPicker.Pick(entries);
 
-            await _lotteryRepository.SetWinner(prizeId, winner.Id);
+            // Another request may have drawn this prize between the check above and now;
+            // the stored procedure only lets the first one through.
+            if (!await _lotteryRepository.TryRecordWinner(prizeId, winner.UserId))
+                throw new ConflictException($"Prize {prizeId} was drawn by another request.");
 
-            bool emailSent = true;
-            try
-            {
-                await _emailService.SendWinnerEmail(
-                    winner.Email!,
-                    $"{winner.FirstName} {winner.LastName}",
-                    prize.Name
-                );
-            }
-            catch (Exception ex)
-            {
-                emailSent = false;
-                _logger.LogError(ex, "sending mail failed");
-            }
+            _logger.LogInformation(
+                "Prize {PrizeId} drawn: user {UserId} won with {Tickets} of {TotalTickets} tickets",
+                prizeId, winner.UserId, winner.TicketCount, entries.Sum(e => e.TicketCount));
 
             var result = new LotteryResultDto
             {
                 PrizeId = prizeId,
-                WinnerUserId = winner.Id,
-                EmailSent = emailSent,
+                WinnerUserId = winner.UserId,
+                NotificationQueued = await TryQueueWinnerNotification(prize.Name, winner, prizeId),
                 Winner = new WinnerDto
                 {
-                    Id = winner.Id,
-                    FullName = $"{winner.FirstName} {winner.LastName}",
-                    Email = winner.Email!
-                }
+                    Id = winner.UserId,
+                    FullName = winner.FullName,
+                    Email = winner.Email,
+                },
             };
 
             await AppendLotteryResult(result);
 
             return result;
+        }
+
+        public Task<List<RaffleReportRowDto>> GetRaffleReportAsync() => _lotteryRepository.GetRaffleReport();
+
+        private async Task<bool> TryQueueWinnerNotification(string prizeName, RaffleEntry winner, int prizeId)
+        {
+            // The winner is already committed, so a broker outage must not fail the draw.
+            try
+            {
+                await _publisher.PublishAsync(new WinnerDrawnEvent(
+                    prizeId, prizeName, winner.UserId, winner.FullName, winner.Email, DateTime.UtcNow));
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Could not queue winner notification for prize {PrizeId}", prizeId);
+                return false;
+            }
         }
 
         private async Task AppendLotteryResult(LotteryResultDto result)

@@ -1,9 +1,9 @@
-﻿using ex1.Interfaces.Services;
-using Microsoft.Extensions.Configuration;
+﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using System.Net;
 using System.Net.Mail;
 
-namespace ex1.services
+namespace Lottery.Messaging.Email
 {
         public class EmailService : IEmailService
         {
@@ -46,7 +46,7 @@ namespace ex1.services
                 message.To.Add(toEmail);
 
 
-                var smtpClient = new SmtpClient("smtp.gmail.com")
+                using var smtpClient = new SmtpClient("smtp.gmail.com")
                 {
                     Port = 587, 
                     EnableSsl = true,
